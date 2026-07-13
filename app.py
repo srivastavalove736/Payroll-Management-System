@@ -4,6 +4,16 @@ import database as db
 
 db.init_db()
 
+try:
+    df_check = db.get_dashboard_data()
+    if df_check.empty:
+        import seed_data
+        seed_data.inject_dummy_data()
+        # Re-fetch the data now that it has been populated
+        df_dashboard = db.get_dashboard_data()
+except Exception as e:
+    st.sidebar.error(f"Database sync notification: {e}")
+    
 st.set_page_config(page_title="Advanced HR & Payroll Suite", layout="wide")
 st.title("🏛️ Enterprise Payroll & HR Management System")
 st.markdown("---")

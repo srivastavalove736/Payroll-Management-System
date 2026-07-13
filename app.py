@@ -1,72 +1,179 @@
 import streamlit as st
+import pandas as pd
 import database as db
 
-# Initialize the database table on startup
 db.init_db()
 
-st.set_page_config(page_title="Payroll Management System", layout="wide")
-st.title("💼 AI-Ready Payroll Management System")
+st.set_page_config(page_title="Advanced HR & Payroll Suite", layout="wide")
+st.title("🏛️ Enterprise Payroll & HR Management System")
 st.markdown("---")
 
-# Sidebar navigation
-menu = ["📊 Dashboard & View", "➕ Add Employee", "❌ Remove Employee"]
-choice = st.sidebar.selectbox("Navigation Menu", menu)
-
-# --- TAB 1: DASHBOARD & VIEW ---
-if choice == "📊 Dashboard & View":
-    st.subheader("Employee Payroll Records")
-    df = db.get_all_employees()
+# Navigation Menu matching your requirements
+menu = [
+    "👾 0. Dashboard & View",
+    "👤 1. Employee Onboarding", 
+    "🔌 2. HR & Attendance Integration", 
+    "🧮 3. Payroll & Statutory Compliance", 
+    "🏦 4. Salary Disbursement & ESS"
+]
+choice = st.sidebar.selectbox("Modules", menu)
+# ==========================================
+# MODULE 0: DASHBOARD & VIEW (FRONT TAB)
+# ==========================================
+if "Dashboard & View" in choice:
+    st.subheader("📊 Central HR & Operations Hub")
     
-    if df.empty:
-        st.info("No employee records found. Use the sidebar to add a new employee.")
+    # 1. Pull the newly seeded data framework
+    df_dashboard = db.get_dashboard_data()
+    
+    if df_dashboard.empty:
+        st.info("💡 The database ledger is currently empty. Run seed_data.py or onboard employees to populate records.")
     else:
-        # Display Key Metrics
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Employees", len(df))
-        col2.metric("Total Monthly Payout", f"₹{df['net_salary'].sum():,.2f}")
-        col3.metric("Average Net Salary", f"₹{df['net_salary'].mean():,.2f}")
+        # Create sub-tabs to view analytics and the raw logs side-by-side cleanly
+        tab_analytics, tab_database = st.tabs(["📈 Operational Analytics", "📋 View Master Records"])
         
-        st.markdown("### Detailed Data Table")
-        st.dataframe(df, use_container_width=True)
-
-# --- TAB 2: ADD EMPLOYEE ---
-elif choice == "➕ Add Employee":
-    st.subheader("Register a New Employee")
-    
-    with st.form("employee_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            name = st.text_input("Full Name")
-            role = st.text_input("Job Role/Designation")
-            base_salary = st.number_input("Base Salary (₹)", min_value=0.0, step=1000.0)
+        with tab_analytics:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(label="Active Onboarded Staff", value=int(df_dashboard["Employee ID"].nunique()))
+            with col2:
+                # Fill missing attendance data with 0 temporarily for metric calculation safely
+                avg_attendance = df_dashboard["Days Present"].fillna(0).mean()
+                st.metric(label="Average Team Attendance", value=f"{avg_attendance:.2f} / 30")
             
-        with col2:
-            allowances = st.number_input("Allowances (HRA, TA, etc.) (₹)", min_value=0.0, step=500.0)
-            deductions = st.number_input("Deductions (PF, Tax, etc.) (₹)", min_value=0.0, step=500.0)
-        
-        submit_button = st.form_submit_button("Calculate & Save Record")
-        
-        if submit_button:
-            if name.strip() == "" or role.strip() == "":
-                st.error("Please fill out both Name and Role fields.")
+            st.markdown("### Team Attendance Breakdown")
+            # Create a bar chart tracking days present against employee names
+            chart_data = df_dashboard.dropna(subset=["Days Present"]).set_index("Name")[["Days Present"]]
+            if not chart_data.empty:
+                st.bar_chart(chart_data)
             else:
-                db.add_employee(name, role, base_salary, allowances, deductions)
-                st.success(f"Successfully added {name} to the payroll database!")
+                st.caption("No attendance logs found to plot yet.")
+                
+        with tab_database:
+            st.markdown("### Master Ledger Logs")
+            # Render the structural dataframe directly onto the page
+            st.dataframe(df_dashboard, use_container_width=True, hide_index=True)
 
-# --- TAB 3: REMOVE EMPLOYEE ---
-elif choice == "❌ Remove Employee":
-    st.subheader("Remove Employee Record")
-    df = db.get_all_employees()
+# ==========================================
+# MODULE 1: EMPLOYEE ONBOARDING & VALIDATION
+# ==========================================
+if choice == "👤 1. Employee Onboarding":
+    st.subheader("New Employee Registration & Document Validation")
     
-    if df.empty:
-        st.info("No records available to delete.")
+    with st.form("onboarding_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("### Personal Details")
+            name = st.text_input("Full Name")
+            email = st.text_input("Official Email ID")
+            role = st.text_input("Designation")
+            pan = st.text_input("PAN Card Number (10 Digits)")
+        with col2:
+            st.markdown("### Statutory Bank Account Verification")
+            bank = st.text_input("Bank Name")
+            acc = st.text_input("Account Number")
+            ifsc = st.text_input("IFSC Code")
+            
+        submitted = st.form_submit_button("Validate & Onboard Employee")
+        if submitted:
+            # Simple UI Validations
+            if len(pan) != 10:
+                st.error("Invalid PAN format! Must be 10 characters.")
+            elif not name or not email:
+                st.error("Name and Email are mandatory fields.")
+            else:
+                success = db.onboard_employee(name, email, role, bank, acc, ifsc, pan)
+                if success:
+                    st.success(f"🎉 System Onboarded: {name}. Profiles synced with database.")
+                else:
+                    st.error("Email already registered!")
+
+# ==========================================
+# MODULE 2: INTEGRATION WITH HR SYSTEMS
+# ==========================================
+elif choice == "🔌 2. HR & Attendance Integration":
+    st.subheader("Sync Attendance Data from HR Systems")
+    emp_map = db.get_employee_dropdown()
+    
+    if not emp_map:
+        st.info("No employees found. Complete onboarding first.")
     else:
-        # Create a dropdown mapping "ID: Name" for easy deletion Selection
-        employee_options = {row['id']: f"ID {row['id']} - {row['name']} ({row['role']})" for _, row in df.iterrows()}
-        selected_id = st.selectbox("Select Employee to Remove", options=list(employee_options.keys()), format_func=lambda x: employee_options[x])
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            selected_emp = st.selectbox("Select Employee", options=list(emp_map.keys()), format_func=lambda x: emp_map[x])
+        with col2:
+            month = st.selectbox("Payroll Month", ["July 2026", "August 2026", "September 2026"])
+        with col3:
+            days_present = st.number_input("Days Present (Max 30)", min_value=0.0, max_value=30.0, value=30.0, step=0.5)
+            
+        if st.button("Sync Attendance to Ledger"):
+            db.update_attendance(selected_emp, month, days_present)
+            st.success(f"Linked {days_present} active days for calculation.")
+
+# ==========================================
+# MODULE 3: PAYROLL CALCULATION & COMPLIANCE
+# ==========================================
+elif choice == "🧮 3. Payroll & Statutory Compliance":
+    st.subheader("Automated Statutory Deductions Engine")
+    
+    # Fetch base variables
+    base_ctc = st.number_input("Enter Standard Base CTC for processing (Monthly Component)", min_value=10000.0, value=50000.0)
+    
+    st.markdown("### Standard Rules Engine (Indian Labor Laws Structure)")
+    
+    # Formulas implementation
+    pf = base_ctc * 0.12     # Employee PF contribution (12%)
+    esi = base_ctc * 0.0075  # ESI contribution (0.75%)
+    prof_tax = 200.00        # Standard professional tax slab
+    tds = base_ctc * 0.10    # Projected tax deduction slab (10%)
+    net_pay = base_ctc - (pf + esi + prof_tax + tds)
+    
+    # Display the breakdown variables clearly using containers
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info(f"**Gross Monthly Pay:** ₹{base_ctc:,.2f}")
+        st.error(f"**Provident Fund (PF - 12%):** ₹{pf:,.2f}")
+        st.error(f"**Employee State Insurance (ESI - 0.75%):** ₹{esi:,.2f}")
+    with col2:
+        st.error(f"**Professional Tax (PT):** ₹{prof_tax:,.2f}")
+        st.error(f"**TDS/Income Tax Slab:** ₹{tds:,.2f}")
+        st.success(f"**Take Home Net Pay:** ₹{net_pay:,.2f}")
+
+    st.warning("⚠️ **Compliance Checklist:** Submitting updates compiles PF Form-5 & ESI monthly statutory contributions automatically for legal audits.")
+
+# ==========================================
+# MODULE 4: SALARY DISBURSEMENT & ESS (SELF SERVICE)
+# ==========================================
+elif choice == "🏦 4. Salary Disbursement & ESS":
+    st.subheader("Salary Bank Vault Transfer & Employee Self-Service Panel")
+    
+    tab1, tab2 = st.tabs(["🏛️ Admin Disbursement Vault", "🔐 Employee Self-Service Dashboard"])
+    
+    with tab1:
+        st.markdown("### Process Bulk Payouts")
+        st.caption("Integrated Node simulator for RazorpayX / Bank APIs")
+        st.button("⚡ Dispatch Funds via Direct Bank Transfer IMPS/NEFT")
         
-        if st.button("Delete Record", type="primary"):
-            db.delete_employee(selected_id)
-            st.success("Record deleted successfully!")
-            st.rerun()
+    with tab2:
+            st.markdown("### Secure Employee Pay Slip Engine")
+            emp_map = db.get_employee_dropdown()
+            if emp_map:
+                user_view = st.selectbox("Identify Profile", options=list(emp_map.keys()), format_func=lambda x: emp_map[x])
+                
+                st.markdown(f"""
+                ---
+                ### PAYSLIP - CONFIDENTIAL
+                **Employee ID:** {user_view} | **Name:** {emp_map[user_view]}  
+                *Earnings and statutory verification summaries compiled securely.*
+                """)
+                
+                # 1. Trigger the binary compilation function
+                pdf_bytes = db.generate_payslip_pdf(user_view, emp_map[user_view])
+                
+                # 2. Feed the genuine binary variable back to Streamlit
+                st.download_button(
+                    label="📥 Download PDF Copy", 
+                    data=bytes(pdf_bytes), 
+                    file_name=f"Payslip_ID_{user_view}.pdf",
+                    mime="application/pdf"
+                )

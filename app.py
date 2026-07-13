@@ -155,25 +155,34 @@ elif choice == "🏦 4. Salary Disbursement & ESS":
         st.button("⚡ Dispatch Funds via Direct Bank Transfer IMPS/NEFT")
         
     with tab2:
-            st.markdown("### Secure Employee Pay Slip Engine")
-            emp_map = db.get_employee_dropdown()
-            if emp_map:
-                user_view = st.selectbox("Identify Profile", options=list(emp_map.keys()), format_func=lambda x: emp_map[x])
-                
-                st.markdown(f"""
-                ---
-                ### PAYSLIP - CONFIDENTIAL
-                **Employee ID:** {user_view} | **Name:** {emp_map[user_view]}  
-                *Earnings and statutory verification summaries compiled securely.*
-                """)
-                
-                # 1. Trigger the binary compilation function
-                pdf_bytes = db.generate_payslip_pdf(user_view, emp_map[user_view])
-                
-                # 2. Feed the genuine binary variable back to Streamlit
-                st.download_button(
-                    label="📥 Download PDF Copy", 
-                    data=bytes(pdf_bytes), 
-                    file_name=f"Payslip_ID_{user_view}.pdf",
-                    mime="application/pdf"
-                )
+        st.markdown("### Secure Employee Pay Slip Engine")
+        emp_map = db.get_employee_dropdown()
+        
+        if emp_map:
+            user_view = st.selectbox("Identify Profile", options=list(emp_map.keys()), format_func=lambda x: emp_map[x])
+            
+            # Fetch backend profile info and its matching predefined salary breakdown
+            emp_info = db.get_employee_full_details(user_view)
+            sal_breakdown = db.get_salary_structure(emp_info["role"])
+            
+            # Show live preview metrics directly inside the Streamlit UI
+            st.markdown(f"#### 📄 Live Statement Preview for **{emp_info['name']}**")
+            
+            preview_col1, preview_col2 = st.columns(2)
+            with preview_col1:
+                st.info(f"**Predefined Gross Salary:** ₹{sal_breakdown['base']:,.2f}")
+                st.caption(f"Assigned Tier Profile based on designation: *{emp_info['role']}*")
+            with preview_col2:
+                st.success(f"**Computed Net Payout:** ₹{sal_breakdown['net_pay']:,.2f}")
+                st.caption("All mandatory EPF, ESI, PT, and TDS metrics successfully applied.")
+            
+            # Compile the clean detailed PDF structure
+            pdf_bytes = db.generate_detailed_payslip_pdf(user_view)
+            
+            # Download trigger
+            st.download_button(
+                label="📥 Download Detailed Payslip PDF",
+                data=bytes(pdf_bytes),
+                file_name=f"Detailed_Payslip_ID_{user_view}.pdf",
+                mime="application/pdf"
+            )
